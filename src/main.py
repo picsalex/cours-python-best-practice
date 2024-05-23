@@ -1,62 +1,119 @@
 import os
+from typing import List
+
 from PIL import Image
 import torch
 from torchvision import transforms, models
 from torchvision.models.resnet import ResNet18_Weights
 
-class imageData:
-    def __init__(self, DIR):
-        self.D = DIR
 
-    def LoadImages(self):
-        imgs = []
-        for F in os.listdir(self.D):
-            if F.endswith('.jpg') or F.endswith('.png'):
-                imgs.append(Image.open(os.path.join(self.D, F)))
-        return imgs
+class ImageLoader:
+    def __init__(self, image_dir: str):
+        self.image_dir = image_dir
 
-class imgProcess:
-    def __init__(self, size):
-        self.s = size
+    def load_images(self) -> List[Image]:
+        """
+        Load images from the image directory
 
-    def resize_and_GRAY(self, img_list):
-        p_images = []
-        for img in img_list:
-            t = transforms.Compose([
-                transforms.Resize((self.s, self.s)),
-                transforms.Grayscale(num_output_channels = 3),
+        Returns:
+            List[Image]: List of images loaded from the image directory
+        """
+        result = []
+
+        for file_path in os.listdir(self.image_dir):
+            if file_path.endswith(".jpg") or file_path.endswith(".png"):
+                result.append(Image.open(os.path.join(self.image_dir, file_path)))
+
+        return result
+
+
+class ImageProcessor:
+
+    def __init__(self, output_image_size: int):
+        self.output_image_size = output_image_size
+
+    def apply_preprocessing(self, images_list: List[Image]) -> List[torch.Tensor]:
+        """
+        Apply preprocessing to the list of images
+
+        Args:
+            images_list: List of images to be preprocessed
+
+        Returns:
+            List of preprocessed images
+        """
+        result = []
+        for image in images_list:
+            result.append(self._preprocess_image(image=image))
+        return result
+
+    def _preprocess_image(self, image: Image) -> torch.Tensor:
+        """
+        Preprocess the image
+
+        Args:
+            image: Image to be preprocessed
+
+        Returns:
+            Preprocessed image
+        """
+        t = transforms.Compose(
+            [
+                transforms.Resize((self.output_image_size, self.output_image_size)),
+                transforms.Grayscale(num_output_channels=3),
                 transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[
-                    0.229, 0.224, 0.225
-                ])
-            ])
-            p_images.append(t(img))
-        return p_images
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                ),
+            ]
+        )
+        return t(image)
 
 
-
-class predictor:
+class Resnet18Predictor:
     def __init__(self):
-        self.mdl = models.resnet18(weights=ResNet18_Weights.DEFAULT)
-        self.mdl.eval()
+        self.model = models.resnet18(weights=ResNet18_Weights.DEFAULT)
+        self.model.eval()
 
-    def Predict_Img(self, processed_images):
-        results = []
-        for img_tensor in processed_images:
-            pred = self.mdl(img_tensor.unsqueeze(0))
-            results.append(torch.argmax(pred, dim= 1).item())
-        return results
+    def predict(self, tensor_list: List[torch.Tensor]) -> List[int]:
+        """
+        Predict the class of the image
+
+        Args:
+            tensor_list: List of preprocessed images
+
+        Returns:
+            List of predicted classes
+        """
+        result = []
+
+        for tensor in tensor_list:
+            result.append(self._make_prediction(tensor=tensor))
+
+        return result
+
+    def _make_prediction(self, tensor: torch.Tensor) -> int:
+        """
+        Make prediction on a single image
+
+        Args:
+            tensor: Preprocessed image
+
+        Returns:
+            Predicted class
+        """
+        prediction = self.model(tensor.unsqueeze(0))
+        return torch.argmax(prediction, dim=1).item()
 
 
+if __name__ == "__main__":
+    loader = ImageLoader(image_dir="images/")
+    images = loader.load_images()
 
+    processor = ImageProcessor(256)
+    preprocessed_tensor = processor.apply_preprocessing(images)
 
-if __name__ == '__main__':
-    loader = imageData('images/')
-    images = loader.LoadImages()
+    predictor = Resnet18Predictor()
+    results = predictor.predict(tensor_list=preprocessed_tensor)
 
-    processor = imgProcess(256)
-    processed_images = processor.resize_and_GRAY(images)
-
-    pred = predictor()
-    results = pred.Predict_Img(processed_images)
     print(results)
