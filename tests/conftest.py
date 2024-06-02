@@ -1,4 +1,8 @@
-from src.main import ImageProcessor, Resnet18Predictor, ImageLoader
+from src.main import (
+    ImageProcessor,
+    Resnet18Predictor,
+    ImageLoader,
+)
 import pytest
 from PIL import Image
 
